@@ -9,13 +9,17 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Victoria;
 using Victoria.Node;
+using Liuk_Music_CS_Core.Services;
+using Victoria.WebSocket;
+using Victoria.Player;
+using Microsoft.Extensions.Logging;
 
 namespace Liuk_Music_CS_Core
 {
 	public class BotClient
 	{
-		private DiscordSocketClient? _client;
-		private CommandService? _cmdService;
+		private DiscordSocketClient _client;
+		private CommandService _cmdService;
 		private IServiceProvider? _services;
 
 		// constructor
@@ -25,7 +29,8 @@ namespace Liuk_Music_CS_Core
 			{
 				AlwaysDownloadUsers = true,
 				MessageCacheSize = 100,
-				LogLevel = Discord.LogSeverity.Debug
+				LogLevel = Discord.LogSeverity.Debug,
+				GatewayIntents = GatewayIntents.All
 			});
 
 			_cmdService = cmdService ?? new CommandService(new CommandServiceConfig
@@ -37,11 +42,16 @@ namespace Liuk_Music_CS_Core
 
 		public async Task InitializeAsync()
 		{
-			await _client.LoginAsync(Discord.TokenType.Bot, secrets.token);
+			await _client.LoginAsync(Discord.TokenType.Bot, Secrets.token);
 			await _client.StartAsync();
 
 			_client.Log += LogAsync;
 			_services = SetupServices();
+
+			var cmdHandler = new CommandHanlder(_client, _cmdService, _services);
+			await cmdHandler.InitializeAsync();
+
+			await _services.GetRequiredService<MusicService>().InitializeAsync();
 
 			await Task.Delay(-1);
 		}
@@ -56,7 +66,7 @@ namespace Liuk_Music_CS_Core
 			=> new ServiceCollection()
 			.AddSingleton(_client)
 			.AddSingleton(_cmdService)
-			.AddSingleton<LavaNode>()
+			.AddSingleton<MusicService>()
 			.AddSingleton<LavaNode>()
 			.BuildServiceProvider();
 	}

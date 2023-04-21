@@ -17,12 +17,12 @@
     <Compile Update="secrets.Designer.cs">
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
-      <DependentUpon>secrets.resx</DependentUpon>
+      <DependentUpon>Secrets.resx</DependentUpon>
     </Compile>
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Update="secrets.resx">
+    <EmbeddedResource Update="Secrets.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>secrets.Designer.cs</LastGenOutput>
     </EmbeddedResource>

@@ -21,7 +21,22 @@ namespace Liuk_Music_CS_Core
 		{
 			await _cmdService.AddModulesAsync(assembly: Assembly.GetEntryAssembly(), _services);
 			_cmdService.Log += LogAsync;
-			// _client.MessageReceived
+			_client.MessageReceived += MessageHandlerAsync;
+		}
+
+		private async Task MessageHandlerAsync(SocketMessage socketMessage)
+		{
+			var argPos = 0;
+			if (socketMessage.Author.IsBot) return;
+
+			var userMessage = (SocketUserMessage)socketMessage;
+			if (userMessage is null) return;
+
+			if (!userMessage.HasMentionPrefix(_client.CurrentUser, ref argPos))
+				return;
+
+			var context = new SocketCommandContext(_client, userMessage);
+			await _cmdService.ExecuteAsync(context, argPos, _services);
 		}
 
 		private Task LogAsync(Discord.LogMessage message)
