@@ -21,6 +21,7 @@ namespace Liuk_Music_CS_Core
 		private DiscordSocketClient _client;
 		private CommandService _cmdService;
 		private IServiceProvider? _services;
+		// private readonly GatewayIntents intents = 
 
 		// constructor
 		public BotClient(DiscordSocketClient? client = null, CommandService? cmdService = null)
@@ -30,7 +31,7 @@ namespace Liuk_Music_CS_Core
 				AlwaysDownloadUsers = true,
 				MessageCacheSize = 100,
 				LogLevel = Discord.LogSeverity.Debug,
-				GatewayIntents = GatewayIntents.All
+				GatewayIntents = GatewayIntents.AllUnprivileged
 			});
 
 			_cmdService = cmdService ?? new CommandService(new CommandServiceConfig
@@ -50,7 +51,6 @@ namespace Liuk_Music_CS_Core
 
 			var cmdHandler = new CommandHanlder(_client, _cmdService, _services);
 			await cmdHandler.InitializeAsync();
-
 			await _services.GetRequiredService<MusicService>().InitializeAsync();
 
 			await Task.Delay(-1);

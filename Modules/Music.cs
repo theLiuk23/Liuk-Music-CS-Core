@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Victoria.Node;
+using Victoria.Player;
 
 namespace Liuk_Music_CS_Core.Modules
 {
@@ -20,20 +21,80 @@ namespace Liuk_Music_CS_Core.Modules
 			_musicService = musicService;
 		}
 
-		[Command("Join")]
+		[Command("join")]
 		[Summary("The bot joins the channel the user is in.")]
 		public async Task Join()
 		{
 			var user = Context.User as SocketGuildUser;
-			if (user.VoiceChannel is null)
+			if (user is null || user.VoiceChannel is null)
 			{
 				await ReplyAsync("You need to connect to a voice channel.");
 				return;
 			}
 
-			// Console.WriteLine($"Trying to connect user {user.Username} to {user.VoiceChannel.Name}@{user.VoiceChannel.Position} from chat {Context.Channel.Name}");
 			await _musicService.ConnectToVoiceChannelAsync(user.VoiceChannel, Context.Channel as ITextChannel);
-			await ReplyAsync($"Connected to {user.VoiceChannel.Name}");
+			await ReplyAsync($"Connected to '{user.VoiceChannel.Name}'.");
+		}
+
+		[Command("leave")]
+		[Summary("The bot leaves the voice channel.")]
+		public async Task Leave()
+		{
+			IGuildUser? clientUser = await Context.Channel.GetUserAsync(Context.Client.CurrentUser.Id) as IGuildUser;
+			if (clientUser is null || clientUser.VoiceChannel is null)
+			{
+				await ReplyAsync("The bot is not connected to a voice channel at the moment.");
+				return;
+			}
+
+			await _musicService.LeaveVoiceChannelAsync(clientUser.VoiceChannel as SocketVoiceChannel);
+			await ReplyAsync($"Left '{clientUser.VoiceChannel}' voice channel.");
+		}
+
+		[Command("play")]
+		[Summary("It plays some music by searching the song title to YouTube.")]
+		public async Task Play([Remainder]string query)
+		{
+			var result = await _musicService.PlayAsync(query);
+			await ReplyAsync(result);
+		}
+
+		[Command("stop")]
+		[Summary("It stops the music.")]
+		public async Task Stop()
+		{
+			string result = await _musicService.StopAsync();
+			await ReplyAsync(result);
+		}
+
+		[Command("skip")]
+		[Summary("It skips to the next song.")]
+		public async Task Skip()
+		{
+			string result = await _musicService.SkipAsync();
+			await ReplyAsync(result);
+		}
+
+		[Command("queue")]
+		[Summary("It shows a list of all the songs in the queue.")]
+		public async Task Queue()
+		{
+			object result = _musicService.QueueAsync(Context.User as IUser);
+			if (result is Embed)
+				await ReplyAsync(embed: result as Embed);
+			else
+				await ReplyAsync(result as string);
+		}
+
+		[Command("np")]
+		[Summary("It shows some info about the currently playing track.")]
+		public async Task NowPlaying()
+		{
+			object result = await _musicService.NowPlayingAsync(Context.User as IUser);
+			if (result is Embed)
+				await ReplyAsync(embed: result as Embed);
+			else
+				await ReplyAsync(result as string);
 		}
 	}
 }
