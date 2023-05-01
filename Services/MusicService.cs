@@ -8,20 +8,22 @@ using Victoria.Node.EventArgs;
 using Discord;
 using Victoria.Responses.Search;
 using Microsoft.Extensions.Logging;
+using System.Reflection.Metadata.Ecma335;
 
 namespace Liuk_Music_CS_Core.Services
 {
 	public class MusicService
 	{
 		private readonly DiscordSocketClient _client;
-		private readonly LavaNode _lava;
+		private LavaNode _lava;
+		private LavaPlayer? _player;
 
 		public MusicService(DiscordSocketClient client)
 		{
 			var logger = LoggerFactory.Create(builder =>
 			{
 				builder.AddConsole();
-				builder.SetMinimumLevel(LogLevel.Debug);
+				builder.SetMinimumLevel(LogLevel.Error);
 			}).CreateLogger<LavaNode>();
 
 			_client = client;
@@ -36,38 +38,46 @@ namespace Liuk_Music_CS_Core.Services
 
 		public Task InitializeAsync()
 		{
-			try
-			{
-				_client.Ready += ClientReadyAsync;
-				_lava.OnTrackEnd += TrackEnded;
-			}
-			catch (Exception error)
-			{
-				Console.WriteLine(error.Message);
-			}
+			_client.Ready += ClientReadyAsync;
+			_lava.OnTrackException += TrackException;
+			_lava.OnTrackEnd += TrackEnded;
 
 			return Task.CompletedTask;
 		}
 
-		private Task TrackEnded(TrackEndEventArg<LavaPlayer<LavaTrack>, LavaTrack> arg)
+		public Task TrackException(TrackExceptionEventArg<LavaPlayer<LavaTrack>, LavaTrack> arg)
 		{
-			throw new NotImplementedException();
+			Console.WriteLine(arg.Exception.Message);
+			return Task.CompletedTask;
+		}
+
+		public virtual async Task TrackEnded(TrackEndEventArg<LavaPlayer<LavaTrack>, LavaTrack> arg)
+		{
+			if (arg.Player.Vueue.TryDequeue(out var newTrack))
+			{
+				await arg.Player.TextChannel.SendMessageAsync($"Now playing '{newTrack.Title}'");
+			}
+
+			await arg.Player.PlayAsync(newTrack);
 		}
 
 		public async Task JoinVoiceChannelAsync(SocketVoiceChannel voiceChannel, ITextChannel textChannel)
-			=> await _lava.JoinAsync(voiceChannel, textChannel);
+			=> _player = (LavaPlayer)await _lava.JoinAsync(voiceChannel, textChannel);
 
 		public async Task LeaveVoiceChannelAsync(SocketVoiceChannel? voiceChannel)
-			=> await _lava.LeaveAsync(voiceChannel);
+		{
+			await _lava.LeaveAsync(voiceChannel);
+		}
 
 		public async Task<string> PlayAsync(string query, SocketVoiceChannel voice, ITextChannel text)
 		{
-			if (!_lava.Players.Any() || !_lava.Players.FirstOrDefault().IsConnected)
-				await this.JoinVoiceChannelAsync(voice, text);
+			if (_player is null)
+			{
+				await JoinVoiceChannelAsync(voice, text);
+				Console.WriteLine($"PLAYER: {_player}");
+			}
 
-			var _player = _lava.Players.FirstOrDefault();
-
-			SearchResponse result = await _lava.SearchAsync(Victoria.Responses.Search.SearchType.YouTube, query);
+			SearchResponse result = await _lava.SearchAsync(SearchType.YouTube, query);
 			if (result.Status == SearchStatus.NoMatches)
 				return "No matches found.";
 
@@ -86,8 +96,6 @@ namespace Liuk_Music_CS_Core.Services
 
 		public async Task<string> StopAsync()
 		{
-			var _player = _lava.Players.FirstOrDefault();
-
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
 
@@ -97,8 +105,6 @@ namespace Liuk_Music_CS_Core.Services
 
 		public async Task<string> SkipAsync()
 		{
-			var _player = _lava.Players.FirstOrDefault();
-
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
 
@@ -114,8 +120,6 @@ namespace Liuk_Music_CS_Core.Services
 
 		public object QueueAsync(IUser user)
 		{
-			var _player = _lava.Players.FirstOrDefault();
-
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
 
@@ -150,8 +154,6 @@ namespace Liuk_Music_CS_Core.Services
 
 		public async Task<object> NowPlayingAsync(IUser user)
 		{
-			var _player = _lava.Players.FirstOrDefault();
-
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
 
@@ -175,8 +177,6 @@ namespace Liuk_Music_CS_Core.Services
 
 		public async Task<object> LyricsAsync(IUser user)
 		{
-			var _player = _lava.Players.FirstOrDefault();
-
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
 
@@ -184,26 +184,14 @@ namespace Liuk_Music_CS_Core.Services
 				return "The bot is not playing any song.";
 
 			string lyrics = await _player.Track.FetchLyricsFromGeniusAsync();
-			List<EmbedFieldBuilder> fields = new List<EmbedFieldBuilder>();
-
-			if (lyrics.Length >= 2000)
+			var chunks = lyrics.Chunk(1024);
+			var fields = new List<EmbedFieldBuilder>();
+			foreach (var chunk in chunks)
 			{
-				for (int i = 0; i <= lyrics.Length / 2000; i++)
+				fields.Add(new EmbedFieldBuilder
 				{
-					fields.Add(new EmbedFieldBuilder()
-					{
-						Name = "‎ ",
-						Value = lyrics.Substring(i * 2000, i * 2000 + 2000),
-						IsInline = false
-					});
-				}
-			}
-			else
-			{
-				fields.Add(new EmbedFieldBuilder()
-				{
-					Name = "‎ ",
-					Value = lyrics,
+					Name = _player.Track.Title,
+					Value = chunk,
 					IsInline = false
 				});
 			}

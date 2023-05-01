@@ -10,7 +10,6 @@ namespace Liuk_Music_CS_Core
 		// TODO: 
 		/* 
 		 - lyrics too long
-		 - track finished event
 		 - timeline in np command
 		 - intents
 		 - general simplification
