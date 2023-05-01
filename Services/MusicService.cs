@@ -8,7 +8,6 @@ using Victoria.Node.EventArgs;
 using Discord;
 using Victoria.Responses.Search;
 using Microsoft.Extensions.Logging;
-using System.Reflection.Metadata.Ecma335;
 
 namespace Liuk_Music_CS_Core.Services
 {
@@ -16,7 +15,7 @@ namespace Liuk_Music_CS_Core.Services
 	{
 		private readonly DiscordSocketClient _client;
 		private LavaNode _lava;
-		private LavaPlayer? _player;
+		private LavaPlayer<LavaTrack>? _player;
 
 		public MusicService(DiscordSocketClient client)
 		{
@@ -62,7 +61,12 @@ namespace Liuk_Music_CS_Core.Services
 		}
 
 		public async Task JoinVoiceChannelAsync(SocketVoiceChannel voiceChannel, ITextChannel textChannel)
-			=> _player = (LavaPlayer)await _lava.JoinAsync(voiceChannel, textChannel);
+		{
+			if (_lava.TryGetPlayer(voiceChannel.Guild, out _player))
+				return;
+
+			_player = await _lava.JoinAsync(voiceChannel, textChannel);
+		}
 
 		public async Task LeaveVoiceChannelAsync(SocketVoiceChannel? voiceChannel)
 		{
@@ -71,11 +75,7 @@ namespace Liuk_Music_CS_Core.Services
 
 		public async Task<string> PlayAsync(string query, SocketVoiceChannel voice, ITextChannel text)
 		{
-			if (_player is null)
-			{
-				await JoinVoiceChannelAsync(voice, text);
-				Console.WriteLine($"PLAYER: {_player}");
-			}
+			await JoinVoiceChannelAsync(voice, text);
 
 			SearchResponse result = await _lava.SearchAsync(SearchType.YouTube, query);
 			if (result.Status == SearchStatus.NoMatches)
@@ -87,20 +87,21 @@ namespace Liuk_Music_CS_Core.Services
 				_player.Vueue.Enqueue(track);
 				return $"Added '{track.Title}' to the queue!";
 			}
-			else
-			{
-				await _player.PlayAsync(track);
-				return $"Now playing '{track.Title}'";
-			}
+			await _player.PlayAsync(track);
+			return $"Now playing '{track.Title}'";
 		}
 
 		public async Task<string> StopAsync()
 		{
 			if (_player is null)
-				return $"Error while trying to access the bot player.";
+				return $"The bot is not playing anything.";
+
+			if (_player.VoiceChannel is null)
+				return "The bot is not connected to a voice channel.";
 
 			await _player.StopAsync();
-			return "Stopped the music!";
+			await LeaveVoiceChannelAsync(_player.VoiceChannel as SocketVoiceChannel);
+			return "Left the channel!";
 		}
 
 		public async Task<string> SkipAsync()
