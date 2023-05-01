@@ -32,7 +32,7 @@ namespace Liuk_Music_CS_Core.Modules
 				return;
 			}
 
-			await _musicService.ConnectToVoiceChannelAsync(user.VoiceChannel, Context.Channel as ITextChannel);
+			await _musicService.JoinVoiceChannelAsync(user.VoiceChannel, Context.Channel as ITextChannel);
 			await ReplyAsync($"Connected to '{user.VoiceChannel.Name}'.");
 		}
 
@@ -55,7 +55,13 @@ namespace Liuk_Music_CS_Core.Modules
 		[Summary("It plays some music by searching the song title to YouTube.")]
 		public async Task Play([Remainder]string query)
 		{
-			var result = await _musicService.PlayAsync(query);
+			var user = Context.User as SocketGuildUser;
+			if (user is null || user.VoiceChannel is null)
+			{
+				await ReplyAsync("You need to connect to a voice channel.");
+				return;
+			}
+			var result = await _musicService.PlayAsync(query, user.VoiceChannel, Context.Channel as ITextChannel);
 			await ReplyAsync(result);
 		}
 
@@ -91,6 +97,17 @@ namespace Liuk_Music_CS_Core.Modules
 		public async Task NowPlaying()
 		{
 			object result = await _musicService.NowPlayingAsync(Context.User as IUser);
+			if (result is Embed)
+				await ReplyAsync(embed: result as Embed);
+			else
+				await ReplyAsync(result as string);
+		}
+
+		[Command("lyrics")]
+		[Summary("It shows the lyrics of the currently playing track.")]
+		public async Task Lyrics()
+		{
+			object result = await _musicService.LyricsAsync(Context.User as IUser);
 			if (result is Embed)
 				await ReplyAsync(embed: result as Embed);
 			else

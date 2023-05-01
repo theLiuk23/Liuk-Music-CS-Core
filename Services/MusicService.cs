@@ -1,9 +1,4 @@
 ﻿using Discord.WebSocket;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Victoria;
 using Victoria.Node;
 using Victoria.Player;
@@ -11,58 +6,72 @@ using Victoria.WebSocket;
 using Victoria.Responses;
 using Victoria.Node.EventArgs;
 using Discord;
-using Microsoft.Extensions.Logging;
 using Victoria.Responses.Search;
+using Microsoft.Extensions.Logging;
 
 namespace Liuk_Music_CS_Core.Services
 {
 	public class MusicService
 	{
-		private DiscordSocketClient _client;
-		private LavaNode _lavaNode;
-		private LavaPlayer<LavaTrack>? _player; // null when bot is not connected to a voice channel
+		private readonly DiscordSocketClient _client;
+		private readonly LavaNode _lava;
 
 		public MusicService(DiscordSocketClient client)
 		{
+			var logger = LoggerFactory.Create(builder =>
+			{
+				builder.AddConsole();
+				builder.SetMinimumLevel(LogLevel.Debug);
+			}).CreateLogger<LavaNode>();
+
 			_client = client;
-			var lavaConfig = new NodeConfiguration()
+			_lava = new LavaNode(_client, new NodeConfiguration()
 			{
 				Hostname = "localhost",
 				Port = 2333,
-				Authorization = "youshallnotpass"
-			};
-			_lavaNode = new LavaNode(_client, lavaConfig, null);
+				Authorization = "youshallnotpass",
+				SelfDeaf = true
+			}, logger);
 		}
 
 		public Task InitializeAsync()
 		{
-			// _lavaNode = new LavaNode(_client, new NodeConfiguration(), _logger);
-			_client.Ready += ClientReadyAsync;
-			_lavaNode.OnTrackEnd += TrackFinished;
-			_lavaNode.OnTrackException += TrackException;
+			try
+			{
+				_client.Ready += ClientReadyAsync;
+				_lava.OnTrackEnd += TrackEnded;
+			}
+			catch (Exception error)
+			{
+				Console.WriteLine(error.Message);
+			}
+
 			return Task.CompletedTask;
 		}
 
-		public async Task ConnectToVoiceChannelAsync(SocketVoiceChannel voiceChannel, ITextChannel textChannel)
+		private Task TrackEnded(TrackEndEventArg<LavaPlayer<LavaTrack>, LavaTrack> arg)
 		{
-			_player = await _lavaNode.JoinAsync(voiceChannel, textChannel);
+			throw new NotImplementedException();
 		}
 
+		public async Task JoinVoiceChannelAsync(SocketVoiceChannel voiceChannel, ITextChannel textChannel)
+			=> await _lava.JoinAsync(voiceChannel, textChannel);
+
 		public async Task LeaveVoiceChannelAsync(SocketVoiceChannel? voiceChannel)
-			=> await _lavaNode.LeaveAsync(voiceChannel);
+			=> await _lava.LeaveAsync(voiceChannel);
 
-		public async Task<string> PlayAsync(string query)
+		public async Task<string> PlayAsync(string query, SocketVoiceChannel voice, ITextChannel text)
 		{
-			if (_player is null)
-				return $"Error while trying to access the bot player.";
+			if (!_lava.Players.Any() || !_lava.Players.FirstOrDefault().IsConnected)
+				await this.JoinVoiceChannelAsync(voice, text);
 
-			SearchResponse result = await _lavaNode.SearchAsync(Victoria.Responses.Search.SearchType.YouTube, query);
+			var _player = _lava.Players.FirstOrDefault();
 
+			SearchResponse result = await _lava.SearchAsync(Victoria.Responses.Search.SearchType.YouTube, query);
 			if (result.Status == SearchStatus.NoMatches)
 				return "No matches found.";
 
-			LavaTrack track = result.Tracks.First();
-			
+			LavaTrack track = result.Tracks.FirstOrDefault();
 			if (_player.PlayerState == PlayerState.Playing || _player.PlayerState == PlayerState.Paused)
 			{
 				_player.Vueue.Enqueue(track);
@@ -77,6 +86,8 @@ namespace Liuk_Music_CS_Core.Services
 
 		public async Task<string> StopAsync()
 		{
+			var _player = _lava.Players.FirstOrDefault();
+
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
 
@@ -86,6 +97,8 @@ namespace Liuk_Music_CS_Core.Services
 
 		public async Task<string> SkipAsync()
 		{
+			var _player = _lava.Players.FirstOrDefault();
+
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
 
@@ -101,6 +114,8 @@ namespace Liuk_Music_CS_Core.Services
 
 		public object QueueAsync(IUser user)
 		{
+			var _player = _lava.Players.FirstOrDefault();
+
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
 
@@ -108,6 +123,13 @@ namespace Liuk_Music_CS_Core.Services
 				return "Queue is empty";
 
 			List<EmbedFieldBuilder> fields = new List<EmbedFieldBuilder>();
+			fields.Add(new EmbedFieldBuilder()
+			{
+				Name = "Now playing",
+				Value = _player.Track.Title,
+				IsInline = false
+			});
+
 			int i = 1;
 			foreach (LavaTrack track in _player.Vueue)
 			{
@@ -119,8 +141,8 @@ namespace Liuk_Music_CS_Core.Services
 				});
 				i++;
 			}
-			
-			Embed embed = CreateEmbed("Queue", "It shows a list of all the songs in the queue.", 
+
+			Embed embed = CreateEmbed("Queue", "It shows a list of all the songs in the queue.",
 				null, null, user, fields);
 
 			return embed;
@@ -128,6 +150,8 @@ namespace Liuk_Music_CS_Core.Services
 
 		public async Task<object> NowPlayingAsync(IUser user)
 		{
+			var _player = _lava.Players.FirstOrDefault();
+
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
 
@@ -137,7 +161,7 @@ namespace Liuk_Music_CS_Core.Services
 			LavaTrack track = _player.Track;
 			List<EmbedFieldBuilder> fields = new List<EmbedFieldBuilder>()
 			{
-				new EmbedFieldBuilder() {Name = "Title", Value = track.Title, IsInline=true },
+				new EmbedFieldBuilder() {Name = "Title", Value = track.Title, IsInline=false },
 				new EmbedFieldBuilder() {Name = "Author", Value = track.Author, IsInline=true },
 				new EmbedFieldBuilder() {Name = "Timeline", Value = track.Position, IsInline=false },
 				new EmbedFieldBuilder() {Name = "Duration", Value = track.Duration, IsInline=true },
@@ -149,10 +173,51 @@ namespace Liuk_Music_CS_Core.Services
 			return embed;
 		}
 
-		private async Task ClientReadyAsync()
-			=> await _lavaNode.ConnectAsync();
+		public async Task<object> LyricsAsync(IUser user)
+		{
+			var _player = _lava.Players.FirstOrDefault();
 
-		private Embed CreateEmbed(string title, string description, string url, string imageUrl, IUser user, List<EmbedFieldBuilder> fields)
+			if (_player is null)
+				return $"Error while trying to access the bot player.";
+
+			if (_player.Track is null)
+				return "The bot is not playing any song.";
+
+			string lyrics = await _player.Track.FetchLyricsFromGeniusAsync();
+			List<EmbedFieldBuilder> fields = new List<EmbedFieldBuilder>();
+
+			if (lyrics.Length >= 2000)
+			{
+				for (int i = 0; i <= lyrics.Length / 2000; i++)
+				{
+					fields.Add(new EmbedFieldBuilder()
+					{
+						Name = "‎ ",
+						Value = lyrics.Substring(i * 2000, i * 2000 + 2000),
+						IsInline = false
+					});
+				}
+			}
+			else
+			{
+				fields.Add(new EmbedFieldBuilder()
+				{
+					Name = "‎ ",
+					Value = lyrics,
+					IsInline = false
+				});
+			}
+
+			Embed embed = CreateEmbed($"Lyrics for: {_player.Track.Title}", "It shows the lyrics of the currently playing track.",
+				null, await _player.Track.FetchArtworkAsync(), user, fields);
+
+			return embed;
+		}
+
+		private async Task ClientReadyAsync()
+			=> await _lava.ConnectAsync();
+
+		private static Embed CreateEmbed(string title, string? description, string? url, string? imageUrl, IUser? user, List<EmbedFieldBuilder> fields)
 		{
 			EmbedBuilder embed = new EmbedBuilder()
 			{
@@ -165,26 +230,6 @@ namespace Liuk_Music_CS_Core.Services
 			};
 
 			return embed.Build();
-		}
-
-		private async Task TrackFinished(TrackEndEventArg<LavaPlayer<LavaTrack>, LavaTrack> lava)
-		{
-			if (lava.Reason != TrackEndReason.Finished)
-				return;
-
-			if (!lava.Player.Vueue.TryDequeue(out var item) || !(item is LavaTrack nextTrack))
-			{
-				await lava.Player.TextChannel.SendMessageAsync("Queue is empty!");
-				return;
-			}
-
-			await lava.Player.PlayAsync(nextTrack);
-		}
-
-		private Task TrackException(TrackExceptionEventArg<LavaPlayer<LavaTrack>, LavaTrack> arg)
-		{
-			Console.WriteLine($"Message: {arg.Exception.Message}");
-			return Task.CompletedTask;
 		}
 	}
 }

@@ -7,6 +7,14 @@ namespace Liuk_Music_CS_Core
 	// 1:50:30
 	public class Program
 	{
-		static void Main(string[] args) => new BotClient().InitializeAsync().GetAwaiter().GetResult();
+		// TODO: 
+		/* 
+		 - lyrics too long
+		 - track finished event
+		 - timeline in np command
+		 - intents
+		 - general simplification
+		 */
+		static void Main() => new BotClient().InitializeAsync().GetAwaiter().GetResult();
 	}
 }

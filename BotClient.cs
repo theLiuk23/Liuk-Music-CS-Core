@@ -18,10 +18,9 @@ namespace Liuk_Music_CS_Core
 {
 	public class BotClient
 	{
-		private DiscordSocketClient _client;
-		private CommandService _cmdService;
+		private readonly DiscordSocketClient _client;
+		private readonly CommandService _cmdService;
 		private IServiceProvider? _services;
-		// private readonly GatewayIntents intents = 
 
 		// constructor
 		public BotClient(DiscordSocketClient? client = null, CommandService? cmdService = null)
@@ -30,20 +29,20 @@ namespace Liuk_Music_CS_Core
 			{
 				AlwaysDownloadUsers = true,
 				MessageCacheSize = 100,
-				LogLevel = Discord.LogSeverity.Debug,
+				LogLevel = LogSeverity.Debug,
 				GatewayIntents = GatewayIntents.AllUnprivileged
 			});
 
 			_cmdService = cmdService ?? new CommandService(new CommandServiceConfig
 			{
 				CaseSensitiveCommands = false,
-				LogLevel = Discord.LogSeverity.Verbose
+				LogLevel = LogSeverity.Verbose
 			});
 		}
 
 		public async Task InitializeAsync()
 		{
-			await _client.LoginAsync(Discord.TokenType.Bot, Secrets.token);
+			await _client.LoginAsync(TokenType.Bot, Secrets.token);
 			await _client.StartAsync();
 
 			_client.Log += LogAsync;
