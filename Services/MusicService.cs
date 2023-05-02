@@ -8,6 +8,7 @@ using Victoria.Node.EventArgs;
 using Discord;
 using Victoria.Responses.Search;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 
 namespace Liuk_Music_CS_Core.Services
 {
@@ -50,14 +51,22 @@ namespace Liuk_Music_CS_Core.Services
 			return Task.CompletedTask;
 		}
 
+		private async Task<LavaTrack> SearchQueryOnYt(string query)
+		{
+			SearchResponse result = await _lava.SearchAsync(SearchType.YouTube, query);
+			if (result.Status == SearchStatus.NoMatches)
+				return null;
+
+			return result.Tracks.FirstOrDefault();
+		}
+
 		public virtual async Task TrackEnded(TrackEndEventArg<LavaPlayer<LavaTrack>, LavaTrack> arg)
 		{
 			if (arg.Player.Vueue.TryDequeue(out var newTrack))
 			{
 				await arg.Player.TextChannel.SendMessageAsync($"Now playing '{newTrack.Title}'");
+				await arg.Player.PlayAsync(newTrack);
 			}
-
-			await arg.Player.PlayAsync(newTrack);
 		}
 
 		public async Task JoinVoiceChannelAsync(SocketVoiceChannel voiceChannel, ITextChannel textChannel)
@@ -76,12 +85,11 @@ namespace Liuk_Music_CS_Core.Services
 		public async Task<string> PlayAsync(string query, SocketVoiceChannel voice, ITextChannel text)
 		{
 			await JoinVoiceChannelAsync(voice, text);
+			LavaTrack track = await SearchQueryOnYt(query);
 
-			SearchResponse result = await _lava.SearchAsync(SearchType.YouTube, query);
-			if (result.Status == SearchStatus.NoMatches)
-				return "No matches found.";
+			if (track is null)
+				return "No matches found";
 
-			LavaTrack track = result.Tracks.FirstOrDefault();
 			if (_player.PlayerState == PlayerState.Playing || _player.PlayerState == PlayerState.Paused)
 			{
 				_player.Vueue.Enqueue(track);
@@ -176,7 +184,7 @@ namespace Liuk_Music_CS_Core.Services
 			return embed;
 		}
 
-		public async Task<object> LyricsAsync(IUser user)
+		public async Task<object> LyricsAsync(IUser user, string? query)
 		{
 			if (_player is null)
 				return $"Error while trying to access the bot player.";
@@ -184,23 +192,63 @@ namespace Liuk_Music_CS_Core.Services
 			if (_player.Track is null)
 				return "The bot is not playing any song.";
 
-			string lyrics = await _player.Track.FetchLyricsFromGeniusAsync();
-			var chunks = lyrics.Chunk(1024);
-			var fields = new List<EmbedFieldBuilder>();
-			foreach (var chunk in chunks)
+			string lyrics;
+			if (query is null)
 			{
-				fields.Add(new EmbedFieldBuilder
+				try
 				{
-					Name = _player.Track.Title,
-					Value = chunk,
-					IsInline = false
-				});
+					lyrics = await _player.Track.FetchLyricsFromGeniusAsync();
+				}
+				catch
+				{
+					return "Error while trying to fetch the lyrics. Try to input the track title manually.";
+				}
+			}
+			else
+			{
+				LavaTrack track = await SearchQueryOnYt(query);
+				if (track is null)
+					return "No matches found.";
+
+				try
+				{
+					lyrics = await track.FetchLyricsFromGeniusAsync();
+				}
+				catch
+				{
+					return "Error while trying to fetch the lyrics. Try to input the track title manually.";
+				}
 			}
 
-			Embed embed = CreateEmbed($"Lyrics for: {_player.Track.Title}", "It shows the lyrics of the currently playing track.",
-				null, await _player.Track.FetchArtworkAsync(), user, fields);
+			try
+			{
+				var chunks = lyrics.Divide();
+				var fields = new List<EmbedFieldBuilder>();
+				foreach (var chunk in chunks)
+				{
+					fields.Add(new EmbedFieldBuilder
+					{
+						Name = _player.Track.Title,
+						Value = chunk,
+						IsInline = false
+					});
+				}
 
-			return embed;
+				Console.WriteLine("PRIMA");
+
+				Embed embed = CreateEmbed($"Lyrics for: {_player.Track.Title}", "It shows the lyrics of the currently playing track.",
+					null, await _player.Track.FetchArtworkAsync(), user, fields);
+
+				Console.WriteLine("DOPO");
+
+				return embed;
+			}
+			catch (Exception error)
+			{
+				Console.WriteLine(error.Message);
+				return "Error.";
+			}
+			
 		}
 
 		private async Task ClientReadyAsync()

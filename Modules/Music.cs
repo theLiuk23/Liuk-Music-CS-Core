@@ -105,9 +105,9 @@ namespace Liuk_Music_CS_Core.Modules
 
 		[Command("lyrics")]
 		[Summary("It shows the lyrics of the currently playing track.")]
-		public async Task Lyrics()
+		public async Task Lyrics([Remainder]string? query=null)
 		{
-			object result = await _musicService.LyricsAsync(Context.User as IUser);
+			object result = await _musicService.LyricsAsync(Context.User as IUser, query);
 			if (result is Embed)
 				await ReplyAsync(embed: result as Embed);
 			else
